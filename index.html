@@ -83,6 +83,19 @@ footer b{color:var(--tx)}
 .ownbox.on{display:flex}
 .ownbox input{background:#0d1420;border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:9px 12px;font-size:13px;outline:none;width:190px}
 .ownbox input:focus{border-color:var(--acc)}
+.iprow{display:flex;gap:8px;margin:10px 0 6px}
+.iprow input{flex:1;min-width:0;background:#0d1420;border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:10px 12px;font-size:13.5px;outline:none;transition:border .2s}
+.iprow input:focus{border-color:var(--acc)}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:13px;border-bottom:1px dashed rgba(255,255,255,.06)}
+.kv:last-child{border-bottom:0}
+.kv .k2{color:var(--dim);flex:none}
+.kv .v2{text-align:right;word-break:break-word}
+.warn{color:#ff7a7a}.good{color:var(--ok)}
+.mapcard{margin-top:12px}
+.mapcap{color:var(--dim);font-size:12px;margin:2px 0 6px}
+#mapWrap iframe{width:100%;height:230px;border:0;border-radius:12px;display:block}
+.mapempty{color:var(--dim);font-size:13px;padding:18px 0;text-align:center}
+.flag{height:13px;border-radius:2px;vertical-align:-1.5px;margin-right:4px}
 </style>
 </head>
 <body>
@@ -135,6 +148,28 @@ footer b{color:var(--tx)}
         <div class="pbar" id="speedBar" style="display:none"><div class="track"><div class="fill" id="speedFill"></div></div><span id="speedPct"></span></div>
         <div id="speedNum"></div>
       </div>
+    </div>
+    <div class="tools">
+      <div class="tool">
+        <h3>Проверить любой IP</h3>
+        <p>Данные по любому адресу: владелец, место, хост</p>
+        <div class="iprow"><input id="checkIp" placeholder="например 1.1.1.1" autocomplete="off" inputmode="url"><button class="tbtn" id="checkIpBtn">Проверить</button></div>
+        <div id="checkOut"></div>
+      </div>
+      <div class="tool">
+        <h3>WebRTC и утечки</h3>
+        <p>Какой IP палит WebRTC и не выдаёт ли он настоящий</p>
+        <div id="webrtcOut">проверяю…</div>
+      </div>
+      <div class="tool">
+        <h3>Железо и отпечатки</h3>
+        <p>Что браузер рассказывает о твоём устройстве</p>
+        <div id="fpOut">собираю…</div>
+      </div>
+    </div>
+    <div class="card mapcard">
+      <div class="lbl">место на карте</div>
+      <div id="mapWrap"><div class="mapempty">появится после проверки IP</div></div>
     </div>
     <footer>ipscan · проверка без регистрации и слежки<div id="ownFooter" style="margin-top:6px"></div></footer>
   </div>
@@ -271,6 +306,139 @@ function renderTiles(){
 }
 function setTile(i,html){var t=$('t'+i);if(t)t.querySelector('.v').innerHTML=html}
 
+/* доп. проверки уровня 2ip */
+var IPD=null;
+function esc(x){return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function fillMap(lat,lon,ip){
+  var b=(lon-0.07)+','+(lat-0.035)+','+(lon+0.07)+','+(lat+0.035);
+  $('mapWrap').innerHTML=(ip?'<div class="mapcap">на карте: '+esc(ip)+'</div>':'')+'<iframe loading="lazy" title="карта" src="https://www.openstreetmap.org/export/embed.html?bbox='+b+'&marker='+lat+','+lon+'&layer=mapnik"></iframe>';
+}
+function rdns(ip,outEl){
+  if(!ip||ip.indexOf(':')>=0)return;
+  var q=ip.split('.').reverse().join('.')+'.in-addr.arpa';
+  fetchJson('https://dns.google/resolve?name='+q+'&type=PTR',5000).then(function(d){
+    var arr=(d.Answer||[]).filter(function(r){return r.type===12});
+    if(!arr.length)return;
+    var hn=esc(arr[0].data.replace(/\.$/,''));
+    if(outEl){
+      var dv=document.createElement('div');dv.className='kv';
+      dv.innerHTML='<span class="k2">хост (rDNS)</span><span class="v2">'+hn+'</span>';
+      outEl.appendChild(dv);
+    } else { $('ipsub').textContent+=' · хост: '+hn; }
+  }).catch(function(){});
+}
+function webrtcCheck(){
+  var out=$('webrtcOut');
+  if(!window.RTCPeerConnection){out.textContent='WebRTC недоступен в этом браузере';return;}
+  var done=false,ips={};
+  function finish(){
+    if(done)return;done=true;
+    var ks=Object.keys(ips);
+    if(!ks.length){out.innerHTML='<div class="kv"><span class="k2">WebRTC IP</span><span class="v2 good">скрыт браузером (mDNS)</span></div>';return;}
+    var h='';
+    ks.forEach(function(ip){
+      var leak=IPD&&ip!==IPD.ip;
+      h+='<div class="kv"><span class="k2">WebRTC IP</span><span class="v2'+(leak?' warn':'')+'">'+esc(ip)+(leak?' · утечка: не совпадает с твоим IP':'')+'</span></div>';
+    });
+    out.innerHTML=h;
+  }
+  var pc;
+  try{pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]});}
+  catch(e){out.textContent='не получилось открыть соединение';return;}
+  pc.createDataChannel('x');
+  pc.onicecandidate=function(e){
+    if(!e.candidate){finish();return;}
+    var m=/candidate:\S+ \d+ \S+ \d+ ([0-9a-fA-F:.]+) \d+ typ (\w+)/.exec(e.candidate.candidate);
+    if(m&&m[2]==='srflx'&&!m[1].split('.').pop().endsWith('.local'))ips[m[1]]=1;
+  };
+  pc.createOffer().then(function(o){return pc.setLocalDescription(o)}).catch(function(){finish()});
+  setTimeout(finish,4000);
+}
+function canHash(){
+  try{
+    var c=document.createElement('canvas');c.width=240;c.height=60;
+    var x=c.getContext('2d');
+    x.textBaseline='top';x.font='17px Arial';
+    x.fillStyle='#f60';x.fillRect(0,0,90,20);
+    x.fillStyle='#0af';x.fillText('ipscan fp 123',4,17);
+    x.fillStyle='rgba(90,50,200,.7)';x.fillText('\u043e\u0442\u043f\u0435\u0447\u0430\u0442\u043e\u043a',6,38);
+    var str=c.toDataURL().slice(-160),h=5381;
+    for(var i=0;i<str.length;i++)h=((h<<5)+h+str.charCodeAt(i))>>>0;
+    return h.toString(16);
+  }catch(e){return 'скрыт'}
+}
+function audioHash(){
+  return new Promise(function(res,rej){
+    try{
+      var C=window.OfflineAudioContext||window.webkitOfflineAudioContext;
+      if(!C){rej();return;}
+      var ctx=new C(1,44100,44100);
+      var o=ctx.createOscillator();o.type='triangle';o.frequency.value=10000;
+      var comp=ctx.createDynamicsCompressor();
+      comp.threshold.value=-50;comp.knee.value=40;comp.ratio.value=12;comp.attack.value=0;comp.release.value=0.25;
+      o.connect(comp);comp.connect(ctx.destination);o.start(0);
+      function done(buf){
+        try{
+          var b=buf.getChannelData(0),sm=0;
+          for(var i=4500;i<5000;i++)sm+=Math.abs(b[i]);
+          var h=5381,str=String(sm);
+          for(var j=0;j<str.length;j++)h=((h<<5)+h+str.charCodeAt(j))>>>0;
+          res(h.toString(16));
+        }catch(e){rej()}
+      }
+      var pr=ctx.startRendering();
+      if(pr&&pr.then)pr.then(done);else ctx.oncomplete=function(e){done(e.renderedBuffer)};
+    }catch(e){rej()}
+  });
+}
+function fpRender(){
+  var rows=[];
+  var gpu='скрыт';
+  try{
+    var c=document.createElement('canvas');
+    var gl=c.getContext('webgl')||c.getContext('experimental-webgl');
+    if(gl){var dx=gl.getExtension('WEBGL_debug_renderer_info');
+      gpu=dx?gl.getParameter(dx.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);}
+  }catch(e){}
+  if(gpu){gpu=String(gpu);if(gpu.length>52)gpu=gpu.slice(0,52)+'…';}
+  rows.push(['GPU (WebGL)',esc(gpu)]);
+  rows.push(['ядра CPU',navigator.hardwareConcurrency||'скрыто']);
+  rows.push(['память',navigator.deviceMemory?'около '+navigator.deviceMemory+' ГБ':'скрыта']);
+  rows.push(['касание',navigator.maxTouchPoints?navigator.maxTouchPoints+' точек':'нет']);
+  rows.push(['canvas-отпечаток',canHash()]);
+  rows.push(['аудио-отпечаток','<span id="ah">считаю…</span>']);
+  rows.push(['User-Agent',esc(navigator.userAgent)]);
+  var h='';
+  rows.forEach(function(r){h+='<div class="kv"><span class="k2">'+r[0]+'</span><span class="v2">'+r[1]+'</span></div>'});
+  $('fpOut').innerHTML=h;
+  audioHash().then(function(v){var el=$('ah');if(el)el.textContent=v;}).catch(function(){var el=$('ah');if(el)el.textContent='скрыт';});
+  if(navigator.getBattery)navigator.getBattery().then(function(b){
+    var el=$('fpOut');if(!el)return;
+    var d=document.createElement('div');d.className='kv';
+    d.innerHTML='<span class="k2">батарея</span><span class="v2">'+Math.round(b.level*100)+'%'+(b.charging?', на зарядке':'')+'</span>';
+    el.insertBefore(d,el.lastChild);
+  }).catch(function(){});
+}
+function doCheck(){
+  var ip=$('checkIp').value.trim(),out=$('checkOut');
+  if(!ip){out.innerHTML='<div class="kv"><span class="k2">введи адрес</span><span class="v2">например 1.1.1.1</span></div>';return;}
+  out.innerHTML='<div class="kv"><span class="k2">проверяю…</span></div>';
+  fetchJson('https://ipwho.is/'+encodeURIComponent(ip),8000).then(function(d){
+    if(!d||d.success===false)throw new Error((d&&d.message)||'bad');
+    var rows=[
+      ['страна',(d.country_code?'<span class="cc">'+d.country_code+'</span> ':'')+(d.country||'—')],
+      ['город',[d.city,d.region].filter(Boolean).join(', ')||'—'],
+      ['провайдер',(d.connection&&(d.connection.isp||d.connection.org))||'—'],
+      ['ASN',(d.connection&&d.connection.asn)?'AS'+d.connection.asn:'—'],
+      ['часовой пояс',(d.timezone&&d.timezone.id)||'—']
+    ];
+    var h='';
+    rows.forEach(function(r){h+='<div class="kv"><span class="k2">'+r[0]+'</span><span class="v2">'+r[1]+'</span></div>'});
+    out.innerHTML=h;
+    if(d.latitude&&d.longitude)fillMap(d.latitude,d.longitude,d.ip);
+    rdns(d.ip,out);
+  }).catch(function(){out.innerHTML='<div class="kv"><span class="k2 warn">не получилось</span><span class="v2">проверь формат адреса</span></div>'});
+}
 /* IP */
 function fetchJson(url,ms){
   return new Promise(function(res,rej){
@@ -283,15 +451,23 @@ function checkV6(){
 }
 function lookup(){
   renderTiles();
+  webrtcCheck();
+  fpRender();
   fetchJson('https://ipwho.is/',8000).then(function(d){
     if(!d||d.success===false)throw new Error('bad');
     $('ipval').textContent=d.ip;
+    IPD=d;
     $('ipsub').textContent=[d.city,d.region,d.country].filter(Boolean).join(', ');
     setTile(0,(d.country_code?'<span class="cc">'+d.country_code+'</span>':'')+(d.country||'—'));
     setTile(1,d.city||'—',(d.region||'')+(d.postal?' · '+d.postal:''));
     setTile(2,(d.connection&&(d.connection.isp||d.connection.org))||'—');
     setTile(3,(d.connection&&d.connection.asn)?'AS'+d.connection.asn:'—',(d.connection&&d.connection.org)||'');
     setTile(4,(d.timezone&&d.timezone.id)||'—','UTC'+((d.timezone&&d.timezone.utc)||''));
+    if(d.country_code){var t0=$('t0'),ccEl=t0&&t0.querySelector('.cc');if(ccEl){var fi=document.createElement('img');fi.className='flag';fi.src='https://flagcdn.com/w40/'+d.country_code.toLowerCase()+'.png';fi.alt='';ccEl.parentNode.insertBefore(fi,ccEl);}}
+    if(d.latitude&&d.longitude)fillMap(d.latitude,d.longitude,d.ip);
+    var btz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if(d.timezone&&d.timezone.id&&btz&&d.timezone.id!==btz)$('ipsub').textContent+=' · часовой пояс IP не совпадает с твоим, возможен VPN';
+    rdns(d.ip,null);
     checkV6();
   }).catch(function(){
     fetchJson('https://ipapi.co/json/',8000).then(function(d){
@@ -393,6 +569,8 @@ $('speedBtn').onclick=function(){
 /* параллакс блобов */
 var blobs=document.querySelectorAll('.blob');
 addEventListener('scroll',function(){var y=scrollY*.05;blobs[0].style.transform='translateY('+y+'px)';blobs[1].style.transform='translateY('+(-y)+'px)'},{passive:true});
+$('checkIpBtn').onclick=doCheck;
+$('checkIp').addEventListener('keydown',function(e){if(e.key==='Enter')doCheck()});
 })();
 </script>
 </body>
