@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ipscan — что видно о вашем IP</title>
+<meta name="description" content="Проверка IP-адреса: страна, город, провайдер, браузер, система, пинг и скорость. С капчей.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236ea8ff'/%3E%3Ctext x='32' y='42' font-family='Arial' font-weight='800' font-size='26' fill='%230b0f14' text-anchor='middle'%3EIP%3C/text%3E%3C/svg%3E">
+<style>
+:root{--bg:#0b0f14;--card:#121821;--line:#1e2733;--tx:#e7edf5;--dim:#8b98a9;--acc:#6ea8ff;--ok:#34d399}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--tx);font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;overflow-x:hidden}
+#bg{position:fixed;inset:0;z-index:0;overflow:hidden}
+.blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:.16}
+.b1{width:520px;height:520px;background:#6ea8ff;top:-160px;right:-120px;animation:drift 18s ease-in-out infinite}
+.b2{width:420px;height:420px;background:#7c5cff;bottom:-140px;left:-120px;animation:drift 24s ease-in-out infinite reverse}
+@keyframes drift{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-40px,30px) scale(1.1)}}
+#wrap{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:28px 20px 60px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:34px}
+.logo{width:44px;height:44px;border-radius:13px;background:linear-gradient(160deg,#6ea8ff,#3d6fd8);display:grid;place-items:center;font-weight:800;color:#0b0f14;font-size:16px;box-shadow:0 8px 24px rgba(110,168,255,.25)}
+.brand{font-weight:800;font-size:18px}
+.brand small{display:block;font-weight:500;font-size:12px;color:var(--dim)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:28px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+#gate{max-width:440px;margin:8vh auto 0;text-align:center;animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+#gate h1{font-size:21px;margin-bottom:6px}
+#gate p{color:var(--dim);font-size:13.5px;margin-bottom:20px}
+#cv{border-radius:14px;border:1px solid var(--line);background:#0d1420;touch-action:manipulation}
+.caprow{display:flex;gap:10px;align-items:center;justify-content:center;margin-bottom:14px}
+#capInput{width:150px;background:#0d1420;border:1px solid var(--line);border-radius:12px;color:var(--tx);font-size:17px;letter-spacing:4px;text-align:center;padding:11px 8px;outline:none;transition:border .2s}
+#capInput:focus{border-color:var(--acc)}
+#capBtn{background:var(--acc);border:0;color:#0b0f14;font-weight:700;font-size:14px;padding:12px 22px;border-radius:12px;cursor:pointer;transition:transform .15s,box-shadow .2s}
+#capBtn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(110,168,255,.3)}
+#capBtn:active{transform:scale(.96)}
+#capBtn:disabled{opacity:.5;cursor:default}
+.iconbtn{background:none;border:1px solid var(--line);border-radius:10px;width:40px;height:40px;display:grid;place-items:center;color:var(--dim);cursor:pointer;transition:color .2s,transform .3s}
+.iconbtn:hover{color:var(--acc);transform:rotate(-90deg)}
+.shake{animation:shake .4s}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-9px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+#capMsg{min-height:18px;font-size:12.5px;margin-top:12px;transition:color .2s}
+#gate.win{animation:gateout .45s ease forwards}
+@keyframes gateout{to{opacity:0;transform:translateY(-26px) scale(.96)}}
+#main{display:none}
+#main.on{display:block;animation:rise .6s cubic-bezier(.2,.7,.2,1) both}
+.ipbox{text-align:center;padding:38px 28px 30px;position:relative;overflow:hidden}
+.ipbox .lbl{color:var(--dim);font-size:12px;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:10px}
+#ipval{font-size:44px;font-weight:800;letter-spacing:1px;background:linear-gradient(120deg,#e7edf5,#6ea8ff);-webkit-background-clip:text;background-clip:text;color:transparent;word-break:break-all;animation:glow 3s ease-in-out infinite}
+@keyframes glow{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
+#ipsub{color:var(--dim);font-size:13px;margin-top:8px}
+#copyIp{position:absolute;top:20px;right:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:14px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;opacity:0;transform:translateY(16px);transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.2,1),border-color .25s}
+.tile.in{opacity:1;transform:none}
+.tile:hover{border-color:rgba(110,168,255,.4);transform:translateY(-3px)}
+.tile .k{color:var(--dim);font-size:11.5px;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;display:flex;align-items:center;gap:7px}
+.tile .k svg{width:14px;height:14px;color:var(--acc);flex:none}
+.tile .v{font-weight:700;font-size:15px;word-break:break-word}
+.tile .v small{display:block;font-weight:500;font-size:12px;color:var(--dim);margin-top:2px}
+.cc{display:inline-block;background:rgba(110,168,255,.15);color:var(--acc);font-weight:800;font-size:12px;padding:3px 9px;border-radius:8px;margin-right:7px;vertical-align:2px}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+@media(max-width:640px){.tools{grid-template-columns:1fr}#ipval{font-size:32px}}
+.tool{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}
+.tool h3{font-size:14px;margin-bottom:4px}
+.tool p{color:var(--dim);font-size:12.5px;margin-bottom:14px}
+.tbtn{background:rgba(110,168,255,.14);color:var(--acc);border:1px solid rgba(110,168,255,.3);font-weight:700;font-size:13px;padding:10px 18px;border-radius:11px;cursor:pointer;transition:transform .15s,background .2s}
+.tbtn:hover{background:rgba(110,168,255,.22)}
+.tbtn:active{transform:scale(.95)}
+.tbtn:disabled{opacity:.5;cursor:default}
+.pbar{display:flex;align-items:center;gap:10px;margin-top:9px;font-size:12px;color:var(--dim)}
+.pbar .track{flex:1;height:6px;border-radius:99px;background:#0d1420;overflow:hidden}
+.pbar .fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#6ea8ff,#34d399);transition:width .5s cubic-bezier(.2,.7,.2,1)}
+#speedNum{font-size:26px;font-weight:800;margin-top:10px;color:var(--ok)}
+footer{margin-top:36px;text-align:center;color:var(--dim);font-size:12px}
+footer b{color:var(--tx)}
+.copypop{position:fixed;z-index:99;pointer-events:none;background:var(--ok);color:#08131f;font-weight:700;font-size:12px;padding:7px 11px;border-radius:999px;display:flex;align-items:center;gap:5px;box-shadow:0 6px 18px rgba(0,0,0,.4);white-space:nowrap;animation:popcopy 1.15s cubic-bezier(.2,.7,.2,1) forwards}
+.copypop svg{width:11px;height:11px;flex:none}
+@keyframes popcopy{0%{opacity:0;transform:translate(-50%,-60%) scale(.6)}20%{opacity:1;transform:translate(-50%,-120%) scale(1.02)}70%{opacity:1}100%{opacity:0;transform:translate(-50%,-215%)}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.tile{opacity:1;transform:none}}
+.ownlink{color:var(--dim);font-size:12.5px;cursor:pointer;margin-top:4px;text-decoration:underline dotted}
+.ownlink:hover{color:var(--acc)}
+.ownbox{display:none;gap:8px;justify-content:center;margin-top:10px}
+.ownbox.on{display:flex}
+.ownbox input{background:#0d1420;border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:9px 12px;font-size:13px;outline:none;width:190px}
+.ownbox input:focus{border-color:var(--acc)}
+</style>
+</head>
+<body>
+<div id="bg"><div class="blob b1"></div><div class="blob b2"></div></div>
+<div id="wrap">
+  <header>
+    <div class="logo">IP</div>
+    <div class="brand">ipscan<small>что видно о вашем подключении</small></div>
+  </header>
+
+  <div class="card" id="gate">
+    <h1>Сначала докажите, что вы человек</h1>
+    <p>Введите символы с картинки, чтобы увидеть данные о вашем IP</p>
+    <div class="caprow">
+      <canvas id="cv" width="180" height="60" aria-label="капча"></canvas>
+      <button class="iconbtn" id="capNew" title="Другая картинка">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="17"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+      </button>
+    </div>
+    <div class="caprow">
+      <input id="capInput" maxlength="6" autocomplete="off" spellcheck="false" placeholder="·····">
+      <button id="capBtn">Проверить</button>
+    </div>
+    <div id="capMsg"></div>
+    <div class="ownlink" id="ownToggle">у меня есть аккаунт</div>
+    <div class="ownbox" id="ownBox"><input id="ownPass" type="password" placeholder="секретный код" autocomplete="off"><button id="ownBtn" class="tbtn">Войти</button></div>
+  </div>
+
+  <div id="main">
+    <div class="card ipbox">
+      <div class="lbl">ваш ip-адрес</div>
+      <div id="ipval">определяю…</div>
+      <div id="ipsub"></div>
+      <button class="iconbtn" id="copyIp" title="Скопировать IP">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="17"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      </button>
+    </div>
+    <div class="grid" id="tiles"></div>
+    <div class="tools">
+      <div class="tool">
+        <h3>Пинг</h3>
+        <p>Три проверки до ближайших серверов</p>
+        <button class="tbtn" id="pingBtn">Измерить</button>
+        <div id="pingOut"></div>
+      </div>
+      <div class="tool">
+        <h3>Скорость загрузки</h3>
+        <p>Качаем тестовый файл и считаем Мбит/с</p>
+        <button class="tbtn" id="speedBtn">Тест</button>
+        <div class="pbar" id="speedBar" style="display:none"><div class="track"><div class="fill" id="speedFill"></div></div><span id="speedPct"></span></div>
+        <div id="speedNum"></div>
+      </div>
+    </div>
+    <footer>ipscan · проверка без регистрации и слежки<div id="ownFooter" style="margin-top:6px"></div></footer>
+  </div>
+</div>
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)};
+
+/* владелец: без капчи */
+var OWNER_PASS='ipscan2026';
+function unlock(){ $('gate').style.display='none'; $('main').classList.add('on'); lookup(); ownerFoot(); }
+function ownerFoot(){
+  var f=$('ownFooter');
+  if(localStorage.getItem('ipscanOwner')==='1'){
+    f.innerHTML='режим владельца · капча выключена · <span id="ownOut" style="cursor:pointer;text-decoration:underline">выйти</span>';
+    $('ownOut').onclick=function(){ localStorage.removeItem('ipscanOwner'); location.reload(); };
+  } else { f.textContent='режим гостя · без входа действует капча'; }
+}
+$('ownToggle').onclick=function(){ var b=$('ownBox'); b.classList.toggle('on'); $('ownPass').focus(); };
+$('ownBtn').onclick=function(){
+  if($('ownPass').value===OWNER_PASS){ localStorage.setItem('ipscanOwner','1'); unlock(); }
+  else{ $('ownPass').value=''; $('ownPass').classList.remove('shake'); void $('ownPass').offsetWidth; $('ownPass').classList.add('shake'); $('ownPass').focus(); }
+};
+$('ownPass').addEventListener('keydown',function(e){ if(e.key==='Enter') $('ownBtn').click(); });
+if(localStorage.getItem('ipscanOwner')==='1') unlock(); else ownerFoot();
+
+/* капча */
+var CAPS='ABCDEFGHJKLMNPQRSTUVWXYZ23456789', code='';
+function drawCap(){
+  code='';
+  for(var i=0;i<5;i++)code+=CAPS[Math.floor(Math.random()*CAPS.length)];
+  var cv=$('cv'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  var g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#0d1420');g.addColorStop(1,'#111a28');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  var cols=['#6ea8ff','#7c5cff','#34d399','#f0f3f8'];
+  for(var l=0;l<4;l++){
+    ctx.strokeStyle=cols[l%3]+'55';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(Math.random()*W,Math.random()*H);
+    ctx.bezierCurveTo(Math.random()*W,Math.random()*H,Math.random()*W,Math.random()*H,Math.random()*W,Math.random()*H);ctx.stroke();
+  }
+  for(var d=0;d<45;d++){ctx.fillStyle=cols[d%4]+'66';ctx.fillRect(Math.random()*W,Math.random()*H,2,2)}
+  for(var c=0;c<5;c++){
+    ctx.save();
+    ctx.translate(22+c*30,H/2+(Math.random()*10-5));
+    ctx.rotate((Math.random()-.5)*.55);
+    ctx.font='800 '+(26+Math.random()*6)+'px Georgia,serif';
+    ctx.fillStyle=cols[c%4];
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(code[c],0,0);
+    ctx.restore();
+  }
+}
+drawCap();
+$('capNew').onclick=drawCap;
+function capTry(){
+  var v=$('capInput').value.trim();
+  if(!v)return;
+  if(v.toUpperCase()===code){
+    $('capMsg').style.color='var(--ok)';$('capMsg').textContent='верно, открываю…';
+    $('capBtn').disabled=true;$('capInput').disabled=true;
+    $('gate').classList.add('win');
+    setTimeout(function(){$('gate').style.display='none';$('main').classList.add('on');lookup()},420);
+  }else{
+    $('capMsg').style.color='#ff8f8f';$('capMsg').textContent='не сходится, попробуйте ещё';
+    $('gate').classList.remove('shake');void $('gate').offsetWidth;$('gate').classList.add('shake');
+    drawCap();$('capInput').value='';$('capInput').focus();
+  }
+}
+$('capBtn').onclick=capTry;
+$('capInput').addEventListener('keydown',function(e){if(e.key==='Enter')capTry()});
+$('capInput').focus();
+
+/* определения */
+function browser(){
+  var u=navigator.userAgent,m;
+  if(m=u.match(/Edg\/([\d.]+)/))return['Edge',m[1]];
+  if(m=u.match(/OPR\/([\d.]+)/))return['Opera',m[1]];
+  if(m=u.match(/Firefox\/([\d.]+)/))return['Firefox',m[1]];
+  if(m=u.match(/Chrome\/([\d.]+)/))return['Chrome',m[1]];
+  if(m=u.match(/Version\/([\d.]+).*Safari/))return['Safari',m[1]];
+  return['неизвестно',''];
+}
+function os(){
+  var u=navigator.userAgent;
+  if(/Windows/.test(u))return'Windows';
+  if(/Android/.test(u))return'Android';
+  if(/iPhone|iPad|iPod/.test(u))return'iOS';
+  if(/Mac OS X/.test(u))return'macOS';
+  if(/Linux/.test(u))return'Linux';
+  return'неизвестно';
+}
+function device(){
+  return /Mobi|Android|iPhone|iPad/.test(navigator.userAgent)?'мобильное':'компьютер';
+}
+function icon(name){
+  var P={
+    globe:'<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/>',
+    map:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    wifi:'<path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="20" r="1"/>',
+    clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    lang:'<path d="m5 8 6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/>',
+    app:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/>',
+    cpu:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/>',
+    screen:'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    cookie:'<path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5h.01M15.5 15.5h.01M10 15h.01M15 9h.01"/>',
+    net:'<path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="5"/>'
+  };
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+P[name]+'</svg>';
+}
+var TILES=['globe','map','wifi','net','clock','lang','app','cpu','screen','cookie','globe','cookie'];
+function tileHtml(i,v,sub){
+  return '<div class="tile" id="t'+i+'"><div class="k">'+icon(TILES[i])+['Страна','Город','Провайдер','ASN / организация','Часовой пояс','Язык браузера','Браузер','Система','Экран','Cookies','IPv6','Do Not Track'][i]+'</div><div class="v">'+v+(sub?'<small>'+sub+'</small>':'')+'</div></div>';
+}
+function renderTiles(){
+  var b=browser(),lang=(navigator.languages||[navigator.language||'']).slice(0,2).join(', '),now=new Date();
+  var h='';
+  for(var i=0;i<12;i++){
+    var v='—',sub='';
+    if(i===4){v=Intl.DateTimeFormat().resolvedOptions().timeZone||'—';sub='сейчас '+now.toLocaleTimeString('ru-RU')}
+    if(i===5){v=lang||'—'}
+    if(i===6){v=b[0];sub='версия '+b[1]}
+    if(i===7){v=os();sub=device()}
+    if(i===8){v=screen.width+'×'+screen.height;sub='пикселей ×'+(window.devicePixelRatio||1)}
+    if(i===9){v=navigator.cookieEnabled?'включены':'выключены'}
+    if(i===10){v='проверяю…'}
+    if(i===11){v=navigator.doNotTrack==='1'?'включён':'не включён'}
+    h+=tileHtml(i,v,sub);
+  }
+  $('tiles').innerHTML=h;
+  var els=document.querySelectorAll('.tile');
+  els.forEach(function(el,i){setTimeout(function(){el.classList.add('in')},i*90)});
+}
+function setTile(i,html){var t=$('t'+i);if(t)t.querySelector('.v').innerHTML=html}
+
+/* IP */
+function fetchJson(url,ms){
+  return new Promise(function(res,rej){
+    var ctl=new AbortController(),to=setTimeout(function(){ctl.abort();rej(new Error('timeout'))},ms||7000);
+    fetch(url,{signal:ctl.signal,cache:'no-store'}).then(function(r){clearTimeout(to);if(!r.ok)throw new Error(r.status);return r.json()}).then(res).catch(function(e){clearTimeout(to);rej(e)});
+  });
+}
+function checkV6(){
+  fetchJson('https://api64.ipify.org?format=json',3500).then(function(d){setTile(10,d.ip||'нет')}).catch(function(){setTile(10,'нет')});
+}
+function lookup(){
+  renderTiles();
+  fetchJson('https://ipwho.is/',8000).then(function(d){
+    if(!d||d.success===false)throw new Error('bad');
+    $('ipval').textContent=d.ip;
+    $('ipsub').textContent=[d.city,d.region,d.country].filter(Boolean).join(', ');
+    setTile(0,(d.country_code?'<span class="cc">'+d.country_code+'</span>':'')+(d.country||'—'));
+    setTile(1,d.city||'—',(d.region||'')+(d.postal?' · '+d.postal:''));
+    setTile(2,(d.connection&&(d.connection.isp||d.connection.org))||'—');
+    setTile(3,(d.connection&&d.connection.asn)?'AS'+d.connection.asn:'—',(d.connection&&d.connection.org)||'');
+    setTile(4,(d.timezone&&d.timezone.id)||'—','UTC'+((d.timezone&&d.timezone.utc)||''));
+    checkV6();
+  }).catch(function(){
+    fetchJson('https://ipapi.co/json/',8000).then(function(d){
+      $('ipval').textContent=d.ip;
+      $('ipsub').textContent=[d.city,d.region,d.country_name].filter(Boolean).join(', ');
+      setTile(0,(d.country_code?'<span class="cc">'+d.country_code+'</span>':'')+(d.country_name||'—'));
+      setTile(1,d.city||'—',d.region||'');
+      setTile(2,d.org||'—');
+      setTile(3,d.asn||'—');
+      setTile(4,d.timezone||'—',d.utc_offset?'UTC'+d.utc_offset:'');
+      checkV6();
+    }).catch(function(){
+      fetchJson('https://api.ipify.org?format=json',6000).then(function(d){
+        $('ipval').textContent=d.ip;$('ipsub').textContent='город и провайдер недоступны';
+        ['0','1','2','3','4'].forEach(function(i){setTile(i,'нет данных')});
+        checkV6();
+      }).catch(function(){
+        $('ipval').textContent='не удалось определить';
+        $('ipsub').textContent='проверьте соединение и обновите страницу';
+      });
+    });
+  });
+  $('copyIp').onclick=function(){
+    var v=$('ipval').textContent;
+    navigator.clipboard.writeText(v).then(function(){popCopy(this,'IP скопирован')}.bind(this),function(){});
+  };
+}
+
+/* пилюля копирования */
+function popCopy(el,msg){
+  var olds=document.querySelectorAll('.copypop');for(var i=0;i<olds.length;i++)olds[i].remove();
+  var r=el.getBoundingClientRect(),p=document.createElement('div');
+  p.className='copypop';
+  p.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span>'+(msg||'скопировано')+'</span>';
+  p.style.left=(r.left+r.width/2)+'px';p.style.top=r.top+'px';
+  document.body.appendChild(p);
+  setTimeout(function(){p.remove()},1150);
+}
+
+/* пинг */
+var PINGS=[['gstatic','https://www.gstatic.com/generate_204'],['cloudflare','https://www.cloudflare.com/cdn-cgi/trace'],['ya','https://ya.ru/favicon.ico']];
+$('pingBtn').onclick=function(){
+  var btn=this;btn.disabled=true;btn.textContent='меряю…';
+  $('pingOut').innerHTML='';
+  var done=0;
+  PINGS.forEach(function(pg){
+    var times=[];
+    function once(k){
+      if(k>=3){fin();return}
+      var t0=performance.now();
+      fetch(pg[1],{mode:'no-cors',cache:'no-store'}).then(function(){times.push(performance.now()-t0);once(k+1)},function(){once(k+1)});
+    }
+    once(0);
+    function fin(){
+      if(!times.length){row('—');return}
+      var avg=Math.round(times.reduce(function(a,b){return a+b},0)/times.length);
+      row(avg);
+    }
+    function row(ms){
+      done++;
+      var w=ms==='—'?4:Math.max(4,Math.min(100,ms/4));
+      var col=ms==='—'?'var(--dim)':ms<80?'var(--ok)':ms<200?'var(--acc)':'#ff9d5c';
+      var d=document.createElement('div');d.className='pbar';
+      d.innerHTML='<span style="width:74px">'+pg[0]+'</span><div class="track"><div class="fill" style="width:0;background:'+col+'"></div></div><span>'+(ms==='—'?'—':ms+' мс')+'</span>';
+      $('pingOut').appendChild(d);
+      requestAnimationFrame(function(){requestAnimationFrame(function(){d.querySelector('.fill').style.width=w+'%'})});
+      if(done===PINGS.length){btn.disabled=false;btn.textContent='Измерить'}
+    }
+  });
+};
+
+/* скорость */
+$('speedBtn').onclick=function(){
+  var btn=this;btn.disabled=true;btn.textContent='качается…';
+  $('speedBar').style.display='flex';$('speedNum').textContent='';
+  var fill=$('speedFill'),pct=$('speedPct'),prog=0;
+  var tick=setInterval(function(){prog=Math.min(92,prog+Math.random()*14);fill.style.width=prog+'%';pct.textContent=Math.round(prog)+'%'},260);
+  var t0=performance.now();
+  fetch('https://speed.cloudflare.com/__down?bytes=4000000',{cache:'no-store'}).then(function(r){return r.arrayBuffer()}).then(function(buf){
+    clearInterval(tick);fill.style.width='100%';pct.textContent='100%';
+    var sec=(performance.now()-t0)/1000,mbps=(buf.byteLength*8/1e6)/sec;
+    anim(mbps);
+    btn.disabled=false;btn.textContent='Тест';
+  }).catch(function(){
+    clearInterval(tick);
+    $('speedNum').textContent='не получилось, у Cloudflare не пробилось';
+    btn.disabled=false;btn.textContent='Тест';
+  });
+  function anim(target){
+    var i=0,steps=36;
+    var iv=setInterval(function(){
+      i++;var cur=target*(1-Math.pow(1-i/steps,3));
+      $('speedNum').textContent=cur.toFixed(1)+' Мбит/с';
+      if(i>=steps)clearInterval(iv);
+    },30);
+  }
+};
+
+/* параллакс блобов */
+var blobs=document.querySelectorAll('.blob');
+addEventListener('scroll',function(){var y=scrollY*.05;blobs[0].style.transform='translateY('+y+'px)';blobs[1].style.transform='translateY('+(-y)+'px)'},{passive:true});
+})();
+</script>
+</body>
+</html>
